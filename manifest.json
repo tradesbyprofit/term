@@ -1,0 +1,20 @@
+{
+  "name": "J.A.R.V.I.S. Pinnacle Quantitative Terminal",
+  "short_name": "JARVIS Pinnacle",
+  "description": "High-Frequency Real-Time Pinnacle Limits & De-Vigged Quantitative Prop Engine",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#030712",
+  "theme_color": "#030712",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

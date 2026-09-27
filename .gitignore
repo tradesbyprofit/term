@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.env
+pinnacle_terminal.db-shm
+pinnacle_terminal.db-wal
