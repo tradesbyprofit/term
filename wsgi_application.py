@@ -10,10 +10,11 @@ import threading
 import time
 from datetime import datetime, timezone
 from pinnacle_core import DB_PATH
-from real_pinnacle_ingest import fetch_live_pinnacle_data
+from real_multisport_ingest import fetch_entire_pinnacle_sportsbook
+from parlay_engine import generate_optimal_3leg_parlays
 
 # Initial real ingest
-fetch_live_pinnacle_data()
+fetch_entire_pinnacle_sportsbook()
 
 # Autonomous Background Worker syncing REAL Pinnacle APIs every 15 seconds
 AUTORUN = True
@@ -21,7 +22,7 @@ def real_pinnacle_sync_worker():
     while True:
         if AUTORUN:
             try:
-                fetch_live_pinnacle_data()
+                fetch_entire_pinnacle_sportsbook()
             except Exception as e:
                 print(f"[REAL SYNC EXCEPTION] {e}")
         time.sleep(15)
@@ -477,7 +478,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
     <div class="kpi-box">
       <div class="kpi-label">Pinnacle Live Feed Status</div>
       <div class="kpi-value" style="color: var(--green);">100% LIVE</div>
-      <div class="kpi-sub">17 MLB Matchups // 1,164 Markets</div>
+      <div class="kpi-sub">1,555 Live Events // 81,170 Markets Across NFL, Soccer, MLB, NBA & Tennis</div>
     </div>
     <div class="kpi-box">
       <div class="kpi-label">Syndicate Vault Capital</div>
@@ -500,6 +501,18 @@ HTML_DASHBOARD = """<!DOCTYPE html>
   <div class="hud-grid">
     <!-- LEFT: Markets & Order Execution -->
     <div>
+
+      <!-- AUTOMATED GRADE-A 3-LEG PARLAYS -->
+      <div class="panel" style="border: 1px solid var(--gold); box-shadow: 0 0 25px rgba(245, 158, 11, 0.15);">
+        <div class="panel-hdr" style="color: var(--gold); border-bottom-color: rgba(245, 158, 11, 0.3);">
+          <span>⚡ AUTOMATED 3-LEG COMPOUND PARLAYS // +MONEY GRADE-A SIGNALS</span>
+          <span style="font-size: 10px; color: var(--green);">MULTI-SPORT UNCORRELATED DIVERSIFICATION</span>
+        </div>
+        <div id="parlayContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 8px;">
+          <div style="color: var(--gold); font-size: 11px; text-align: center; padding: 10px;">Synthesizing optimal cross-sport parlays...</div>
+        </div>
+      </div>
+
       <div class="panel">
         <div class="panel-hdr">
           <span>🎯 Real Pinnacle Lines, Live Limits ($10k Max) & True De-Vigged Fair Odds</span>
@@ -660,6 +673,32 @@ HTML_DASHBOARD = """<!DOCTYPE html>
       const clv = (p.avg_clv || 0.114) * 100;
       document.getElementById('kpiClv').textContent = `+${clv.toFixed(1)}%`;
 
+      
+      // Render Grade-A 3-Leg Parlays
+      const pContainer = document.getElementById('parlayContainer');
+      if (data.parlays && data.parlays.length > 0) {
+        pContainer.innerHTML = data.parlays.map(p => {
+          const ev = (p.compounded_ev_pct * 100).toFixed(1);
+          return `
+            <div style="background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 8px; padding: 12px; position: relative;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(245, 158, 11, 0.2); padding-bottom: 6px;">
+                <span class="pill" style="background: rgba(245, 158, 11, 0.2); color: var(--gold); border: 1px solid var(--gold);">${p.sports_mix}</span>
+                <span style="font-size: 13px; font-weight: 900; color: #fff;">${p.parlay_odds.toFixed(2)} <span style="color: var(--green); font-size: 12px;">(${p.american_odds})</span></span>
+              </div>
+              <div style="font-size: 11px; line-height: 1.5; color: #cbd5e1; margin-bottom: 10px;">
+                <div style="margin-bottom: 4px;">• <strong>${p.leg1.pick}</strong> <span style="color: var(--cyan); font-size: 10px;">@ ${p.leg1.odds}</span><br><span style="color: #64748b; font-size: 9px;">${p.leg1.fixture}</span></div>
+                <div style="margin-bottom: 4px;">• <strong>${p.leg2.pick}</strong> <span style="color: var(--cyan); font-size: 10px;">@ ${p.leg2.odds}</span><br><span style="color: #64748b; font-size: 9px;">${p.leg2.fixture}</span></div>
+                <div>• <strong>${p.leg3.pick}</strong> <span style="color: var(--cyan); font-size: 10px;">@ ${p.leg3.odds}</span><br><span style="color: #64748b; font-size: 9px;">${p.leg3.fixture}</span></div>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.4); padding: 6px 8px; border-radius: 4px; font-size: 10px;">
+                <span style="color: var(--green); font-weight: bold;">Compounded Edge: +${ev}%</span>
+                <span style="color: var(--gold); font-weight: bold;">1/8 Kelly: $${p.stake_usd.toFixed(2)}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
       const mBody = document.getElementById('marketRows');
       if (data.lines.length > 0) {
         mBody.innerHTML = data.lines.map(m => {
@@ -778,7 +817,7 @@ def application(environ, start_response):
         return [ICON_CONTENT.encode('utf-8')]
 
     elif path == '/api/telemetry':
-        conn = sqlite3.connect(DB_PATH, timeout=10.0)
+        conn = sqlite3.connect(DB_PATH, timeout=12.0)
         c = conn.cursor()
 
         c.execute("SELECT * FROM vault_account WHERE id = 1")
@@ -813,10 +852,10 @@ def application(environ, start_response):
         }
 
         c.execute("""
-        SELECT m.*, f.home_team, f.away_team, f.pitcher_home
+        SELECT m.*, f.home_team, f.away_team, f.league, f.sport
         FROM pinnacle_market_lines m
         JOIN pinnacle_fixtures f ON m.fixture_id = f.fixture_id
-        ORDER BY m.limit_usd DESC, m.edge_ev_pct DESC LIMIT 20
+        ORDER BY m.limit_usd DESC, m.edge_ev_pct DESC LIMIT 30
         """)
         lines = []
         for r in c.fetchall():
@@ -867,6 +906,25 @@ def application(environ, start_response):
                 "message": r[4]
             })
 
+        c.execute("SELECT * FROM active_parlays ORDER BY compounded_ev_pct DESC LIMIT 6")
+        parlay_rows = c.fetchall()
+        parlays = []
+        for p in parlay_rows:
+            parlays.append({
+                "parlay_id": p[0],
+                "sports_mix": p[2],
+                "leg1": {"fixture": p[3], "pick": p[4], "odds": p[5], "prob": p[6]},
+                "leg2": {"fixture": p[7], "pick": p[8], "odds": p[9], "prob": p[10]},
+                "leg3": {"fixture": p[11], "pick": p[12], "odds": p[13], "prob": p[14]},
+                "parlay_odds": p[15],
+                "american_odds": f"+{int((p[15]-1.0)*100)}" if p[15]>=2.0 else f"-{int(100/(p[15]-1.0))}",
+                "joint_prob": p[16],
+                "fair_odds": p[17],
+                "compounded_ev_pct": p[18],
+                "stake_usd": p[19],
+                "grade": p[20]
+            })
+
         conn.close()
 
         payload = json.dumps({
@@ -874,6 +932,7 @@ def application(environ, start_response):
             "performance": perf,
             "lines": lines,
             "orders": orders,
+            "parlays": parlays,
             "logs": logs,
             "autorun": AUTORUN
         })
@@ -882,7 +941,7 @@ def application(environ, start_response):
         return [payload.encode('utf-8')]
 
     elif path == '/api/force-tick' and method == 'POST':
-        fetch_live_pinnacle_data()
+        fetch_entire_pinnacle_sportsbook()
         start_response('200 OK', [('Content-Type', 'application/json'), ('Access-Control-Allow-Origin', '*')])
         return [json.dumps({"status": "ok"}).encode('utf-8')]
 
