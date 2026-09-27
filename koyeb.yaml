@@ -1,0 +1,19 @@
+# Koyeb Free Tier Deployment Specification
+name: jarvis-pinnacle-terminal
+services:
+  - name: web
+    type: web
+    git:
+      repository: tradesbyprofit/jarvis-pinnacle-terminal
+      branch: main
+    build:
+      type: buildpack
+      build_command: pip install -r requirements.txt
+      run_command: gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 wsgi_application:application
+    instance_type: nano
+    ports:
+      - port: 8000
+        path: /
+    scalability:
+      min: 1
+      max: 1
